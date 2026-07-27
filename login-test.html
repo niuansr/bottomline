@@ -1,43 +1,64 @@
-<!DOCTYPE html>
-<html lang="he" dir="rtl">
+﻿<!DOCTYPE html>
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>   BottomLine</title>
+<title>Login Test</title>
 <style>
   body { font-family: system-ui, sans-serif; background:#0d1117; color:#e6edf3;
          display:flex; align-items:center; justify-content:center;
-         min-height:100vh; margin:0; }
+         min-height:100vh; margin:0; padding:20px; }
   .card { background:#161b22; border:1px solid #30363d; border-radius:12px;
-          padding:32px; width:340px; }
-  h1 { font-size:18px; margin:0 0 20px; }
+          padding:28px; width:380px; }
+  h1 { font-size:17px; margin:0 0 18px; font-weight:500; }
   input { width:100%; padding:10px; border-radius:8px; border:1px solid #30363d;
           background:#0d1117; color:#e6edf3; box-sizing:border-box; font-size:15px; }
-  button { width:100%; padding:10px; margin-top:12px; border:0; border-radius:8px;
+  button { width:100%; padding:10px; margin-top:10px; border:0; border-radius:8px;
            background:#2f81f7; color:#fff; font-size:15px; cursor:pointer; }
-  button:disabled { opacity:.5; cursor:default; }
-  #msg { margin-top:16px; font-size:14px; line-height:1.5; min-height:20px; }
+  button.alt { background:#21262d; border:1px solid #30363d; }
+  #msg { margin-top:14px; font-size:13px; line-height:1.5; }
   .ok { color:#3fb950; }
   .err { color:#f85149; }
   .box { background:#0d1117; border:1px solid #30363d; border-radius:8px;
-         padding:12px; margin-top:16px; font-size:13px; word-break:break-all; }
+         padding:12px; margin-top:14px; font-size:12px; word-break:break-all;
+         line-height:1.6; }
+  .lbl { color:#8b949e; }
+  hr { border:0; border-top:1px solid #30363d; margin:18px 0; }
 </style>
 </head>
 <body>
 <div class="card">
   <h1>Login Test</h1>
+
   <div id="loggedOut">
     <input id="email" type="email" placeholder="you@example.com" autocomplete="email">
     <button id="send">Send Magic Link</button>
   </div>
+
   <div id="msg"></div>
+
   <div id="loggedIn" style="display:none">
     <div class="box">
-      <div> </div>
-      <div id="who"></div>
-      <div id="uid"></div>
+      <div><span class="lbl">Email:</span> <span id="who"></span></div>
+      <div><span class="lbl">User ID:</span> <span id="uid"></span></div>
     </div>
-    <button id="out">Sign Out</button>
+
+    <hr>
+
+    <div id="noHousehold" style="display:none">
+      <input id="hname" type="text" placeholder="Household name">
+      <button id="create">Create Household</button>
+    </div>
+
+    <div id="hasHousehold" style="display:none">
+      <div class="box">
+        <div><span class="lbl">Household:</span> <span id="hn"></span></div>
+        <div><span class="lbl">ID:</span> <span id="hid"></span></div>
+        <div><span class="lbl">Members:</span> <span id="mcount"></span></div>
+      </div>
+    </div>
+
+    <button id="out" class="alt">Sign Out</button>
   </div>
 </div>
 
@@ -48,42 +69,95 @@ const SUPABASE_KEY = 'sb_publishable_bP4HlQnsVSYjcX_CcqXbjg_cGLEgQ0G';
 
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 const msg = document.getElementById('msg');
+const $ = id => document.getElementById(id);
+
+function show(el, on) { $(el).style.display = on ? 'block' : 'none'; }
+function say(text, cls) { msg.className = cls || ''; msg.textContent = text; }
+
+async function loadHousehold() {
+  const { data, error } = await sb
+    .from('household_members')
+    .select('household_id, households(name)');
+
+  if (error) { say('RLS error: ' + error.message, 'err'); return; }
+
+  if (!data || data.length === 0) {
+    show('noHousehold', true);
+    show('hasHousehold', false);
+    say('No household yet. Create one below.', '');
+    return;
+  }
+
+  const row = data[0];
+  $('hn').textContent = row.households ? row.households.name : '(name hidden)';
+  $('hid').textContent = row.household_id;
+
+  const { count } = await sb
+    .from('household_members')
+    .select('*', { count: 'exact', head: true })
+    .eq('household_id', row.household_id);
+
+  $('mcount').textContent = count;
+  show('noHousehold', false);
+  show('hasHousehold', true);
+  say('Household loaded via RLS.', 'ok');
+}
 
 async function refresh() {
   const { data: { session } } = await sb.auth.getSession();
   if (session) {
-    document.getElementById('loggedOut').style.display = 'none';
-    document.getElementById('loggedIn').style.display = 'block';
-    document.getElementById('who').textContent = session.user.email;
-    document.getElementById('uid').textContent = session.user.id;
-    msg.textContent = '';
+    show('loggedOut', false);
+    show('loggedIn', true);
+    $('who').textContent = session.user.email;
+    $('uid').textContent = session.user.id;
+    await loadHousehold();
   } else {
-    document.getElementById('loggedOut').style.display = 'block';
-    document.getElementById('loggedIn').style.display = 'none';
+    show('loggedOut', true);
+    show('loggedIn', false);
   }
 }
 
-document.getElementById('send').onclick = async () => {
-  const email = document.getElementById('email').value.trim();
-  if (!email) { msg.className='err'; msg.textContent='  '; return; }
-  msg.className=''; msg.textContent='...';
+$('send').onclick = async () => {
+  const email = $('email').value.trim();
+  if (!email) { say('Enter an email', 'err'); return; }
+  say('Sending...');
   const { error } = await sb.auth.signInWithOtp({
-    email,
-    options: { emailRedirectTo: window.location.href }
+    email, options: { emailRedirectTo: window.location.href }
   });
-  if (error) { msg.className='err'; msg.textContent=': ' + error.message; }
-  else { msg.className='ok'; msg.textContent='!    ( ).'; }
+  if (error) say('Error: ' + error.message, 'err');
+  else say('Sent. Check your inbox (and spam).', 'ok');
 };
 
-document.getElementById('out').onclick = async () => {
-  await sb.auth.signOut();
-  refresh();
+$('create').onclick = async () => {
+  const name = $('hname').value.trim();
+  if (!name) { say('Enter a household name', 'err'); return; }
+  say('Creating...');
+
+  const { data: { session } } = await sb.auth.getSession();
+
+  const { data: h, error: e1 } = await sb
+    .from('households')
+    .insert({ name, created_by: session.user.id })
+    .select()
+    .single();
+
+  if (e1) { say('Create failed: ' + e1.message, 'err'); return; }
+
+  const { error: e2 } = await sb
+    .from('household_members')
+    .insert({ household_id: h.id, user_id: session.user.id, role: 'owner' });
+
+  if (e2) { say('Join failed: ' + e2.message, 'err'); return; }
+
+  say('Household created.', 'ok');
+  await loadHousehold();
 };
+
+$('out').onclick = async () => { await sb.auth.signOut(); refresh(); };
 
 sb.auth.onAuthStateChange(() => refresh());
 refresh();
 </script>
 </body>
 </html>
-
 
