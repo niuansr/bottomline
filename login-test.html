@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>   BottomLine</title>
+<style>
+  body { font-family: system-ui, sans-serif; background:#0d1117; color:#e6edf3;
+         display:flex; align-items:center; justify-content:center;
+         min-height:100vh; margin:0; }
+  .card { background:#161b22; border:1px solid #30363d; border-radius:12px;
+          padding:32px; width:340px; }
+  h1 { font-size:18px; margin:0 0 20px; }
+  input { width:100%; padding:10px; border-radius:8px; border:1px solid #30363d;
+          background:#0d1117; color:#e6edf3; box-sizing:border-box; font-size:15px; }
+  button { width:100%; padding:10px; margin-top:12px; border:0; border-radius:8px;
+           background:#2f81f7; color:#fff; font-size:15px; cursor:pointer; }
+  button:disabled { opacity:.5; cursor:default; }
+  #msg { margin-top:16px; font-size:14px; line-height:1.5; min-height:20px; }
+  .ok { color:#3fb950; }
+  .err { color:#f85149; }
+  .box { background:#0d1117; border:1px solid #30363d; border-radius:8px;
+         padding:12px; margin-top:16px; font-size:13px; word-break:break-all; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>Login Test</h1>
+  <div id="loggedOut">
+    <input id="email" type="email" placeholder="you@example.com" autocomplete="email">
+    <button id="send">Send Magic Link</button>
+  </div>
+  <div id="msg"></div>
+  <div id="loggedIn" style="display:none">
+    <div class="box">
+      <div> </div>
+      <div id="who"></div>
+      <div id="uid"></div>
+    </div>
+    <button id="out">Sign Out</button>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const SUPABASE_URL = 'https://ksvbcqngdjbmgxzewtuu.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_bP4HlQnsVSYjcX_CcqXbjg_cGLEgQ0G';
+
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const msg = document.getElementById('msg');
+
+async function refresh() {
+  const { data: { session } } = await sb.auth.getSession();
+  if (session) {
+    document.getElementById('loggedOut').style.display = 'none';
+    document.getElementById('loggedIn').style.display = 'block';
+    document.getElementById('who').textContent = session.user.email;
+    document.getElementById('uid').textContent = session.user.id;
+    msg.textContent = '';
+  } else {
+    document.getElementById('loggedOut').style.display = 'block';
+    document.getElementById('loggedIn').style.display = 'none';
+  }
+}
+
+document.getElementById('send').onclick = async () => {
+  const email = document.getElementById('email').value.trim();
+  if (!email) { msg.className='err'; msg.textContent='  '; return; }
+  msg.className=''; msg.textContent='...';
+  const { error } = await sb.auth.signInWithOtp({
+    email,
+    options: { emailRedirectTo: window.location.href }
+  });
+  if (error) { msg.className='err'; msg.textContent=': ' + error.message; }
+  else { msg.className='ok'; msg.textContent='!    ( ).'; }
+};
+
+document.getElementById('out').onclick = async () => {
+  await sb.auth.signOut();
+  refresh();
+};
+
+sb.auth.onAuthStateChange(() => refresh());
+refresh();
+</script>
+</body>
+</html>
+
+
